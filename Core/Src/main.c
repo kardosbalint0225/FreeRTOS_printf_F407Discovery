@@ -153,9 +153,9 @@ int main(void)
   SystemClock_Config();
   SEGGER_SYSVIEW_Conf();
 
-  MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_USART2_UART_Init();
+  GPIO_Init();
+  DMA_Init();
+  UART2_Init();
 
   uart_tx_available_queue  = xQueueCreate(8, sizeof(uint8_t *));
   uart_tx_ready_queue = xQueueCreate(8, sizeof(uart_tx_data_t));
