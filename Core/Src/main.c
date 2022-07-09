@@ -20,78 +20,19 @@
 #include "semphr.h"
 #include "event_groups.h"
 
-#include "printf.h"
+#include "log.h"
 
 #include "SEGGER_SYSVIEW.h"
 
-typedef struct {
-	uint8_t *pbuf;
-	uint8_t  size;
-} uart_tx_data_t;
-
-extern UART_HandleTypeDef huart2;
-
-static SemaphoreHandle_t uart_tx_complete_semaphore = NULL;
-QueueHandle_t uart_tx_available_queue;
-QueueHandle_t uart_tx_ready_queue;
-QueueHandle_t uart_tx_pending_queue;
-
-uint8_t uart_tx_buffer[128*8];
-
 void SystemClock_Config(void);
-
-
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
-{
-	portBASE_TYPE higher_priority_task_woken;
-	xSemaphoreGiveFromISR(uart_tx_complete_semaphore, &higher_priority_task_woken);
-
-	portYIELD_FROM_ISR(higher_priority_task_woken);
-}
-
-
-void uart_write_task(void *params)
-{
-	vSemaphoreCreateBinary(uart_tx_complete_semaphore);
-	configASSERT(uart_tx_complete_semaphore);
-
-	uart_tx_pending_queue = xQueueCreate(1, sizeof(uint8_t *));
-
-	uart_tx_data_t uart_tx_data = {
-		.pbuf = NULL,
-		.size = 0,
-	};
-
-	for ( ;; )
-	{
-		if (pdPASS == xSemaphoreTake(uart_tx_complete_semaphore, portMAX_DELAY)) {
-			uint8_t *released = NULL;
-
-			xQueueReceive(uart_tx_pending_queue, &released, 0);
-			xQueueSend(uart_tx_available_queue, &released, 0);
-
-			if (pdPASS == xQueueReceive(uart_tx_ready_queue, &uart_tx_data, portMAX_DELAY)) {
-				HAL_UART_Transmit_DMA(&huart2, uart_tx_data.pbuf, uart_tx_data.size);
-				xQueueSend(uart_tx_pending_queue, &uart_tx_data.pbuf, 0);
-			}
-		}
-	}
-}
 
 
 void task_a(void *params)
 {
 	for ( ;; )
 	{
-		uart_tx_data_t data = {
-			.pbuf = NULL,
-			.size = 0,
-		};
-
-		if ( pdPASS == xQueueReceive(uart_tx_available_queue, &data.pbuf, portMAX_DELAY) ) {
-			data.size = (uint8_t)snprintf((char *)data.pbuf, 128, "I am Task A. -> %d.)\r\n", 1);
-			xQueueSend(uart_tx_ready_queue, &data, portMAX_DELAY);
-		}
+		log_info("Test log with arguments: %d, %s\r\n", 1234, "info");
+		vTaskDelay(pdMS_TO_TICKS(2000));
 	}
 }
 
@@ -99,15 +40,8 @@ void task_b(void *params)
 {
 	for ( ;; )
 	{
-		uart_tx_data_t data = {
-			.pbuf = NULL,
-			.size = 0,
-		};
-
-		if ( pdPASS == xQueueReceive(uart_tx_available_queue, &data.pbuf, portMAX_DELAY) ) {
-			data.size = (uint8_t)snprintf((char *)data.pbuf, 128, "I am Task B. -> %d.)\r\n", 2);
-			xQueueSend(uart_tx_ready_queue, &data, portMAX_DELAY);
-		}
+		log_warning("Test log with arguments: %d, %s\r\n", 5678, "warning");
+		vTaskDelay(pdMS_TO_TICKS(5000));
 	}
 }
 
@@ -115,15 +49,8 @@ void task_c(void *params)
 {
 	for ( ;; )
 	{
-		uart_tx_data_t data = {
-			.pbuf = NULL,
-			.size = 0,
-		};
-
-		if ( pdPASS == xQueueReceive(uart_tx_available_queue, &data.pbuf, portMAX_DELAY) ) {
-			data.size = (uint8_t)snprintf((char *)data.pbuf, 128, "I am Task C. -> %d.)\r\n", 3);
-			xQueueSend(uart_tx_ready_queue, &data, portMAX_DELAY);
-		}
+		log_error("Test log with arguments: %d, %s\r\n", 123456789, "error");
+		vTaskDelay(pdMS_TO_TICKS(10000));
 	}
 }
 
@@ -131,17 +58,23 @@ void task_d(void *params)
 {
 	for ( ;; )
 	{
-		uart_tx_data_t data = {
-			.pbuf = NULL,
-			.size = 0,
-		};
-
-		if ( pdPASS == xQueueReceive(uart_tx_available_queue, &data.pbuf, portMAX_DELAY) ) {
-			data.size = (uint8_t)snprintf((char *)data.pbuf, 128, "I am Task D. -> %d.)\r\n", 4);
-			xQueueSend(uart_tx_ready_queue, &data, portMAX_DELAY);
-		}
+		echo_back('>');
+		vTaskDelay(pdMS_TO_TICKS(100));
+		echo_back('e');
+		vTaskDelay(pdMS_TO_TICKS(100));
+		echo_back('c');
+		vTaskDelay(pdMS_TO_TICKS(100));
+		echo_back('h');
+		vTaskDelay(pdMS_TO_TICKS(100));
+		echo_back('o');
+		vTaskDelay(pdMS_TO_TICKS(100));
+		echo_back('\r');
+		vTaskDelay(pdMS_TO_TICKS(100));
+		echo_back('\n');
+		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
+
 
 /**
   * @brief  The application entry point.
@@ -149,75 +82,58 @@ void task_d(void *params)
   */
 int main(void)
 {
-  HAL_Init();
-  SystemClock_Config();
-  SEGGER_SYSVIEW_Conf();
+	HAL_Init();
+	SystemClock_Config();
+	SEGGER_SYSVIEW_Conf();
 
-  GPIO_Init();
-  DMA_Init();
-  UART2_Init();
+	GPIO_Init();
+	DMA_Init();
 
-  uart_tx_available_queue  = xQueueCreate(8, sizeof(uint8_t *));
-  uart_tx_ready_queue = xQueueCreate(8, sizeof(uart_tx_data_t));
+	log_init();
 
+	xTaskCreate(
+				task_a,
+				"task_a",
+				( configMINIMAL_STACK_SIZE * 3 ),
+				NULL,
+				tskIDLE_PRIORITY,
+				NULL
+				);
 
-  for (uint8_t i = 0; i < 8; i++) {
-	  uint8_t *buffer_address = &uart_tx_buffer[i*128];
-	  xQueueSend(uart_tx_available_queue, &buffer_address, 0);
-  }
+	xTaskCreate(
+				task_b,
+				"task_b",
+				( configMINIMAL_STACK_SIZE * 3 ),
+				NULL,
+				tskIDLE_PRIORITY,
+				NULL
+				);
 
-  xTaskCreate(
-		  	  uart_write_task,
-			  "uart write",
-			  ( configMINIMAL_STACK_SIZE * 3 ),
-			  NULL,
-			  tskIDLE_PRIORITY+1,
-			  NULL
-		  	  );
-/*
-  xTaskCreate(
-		  	  task_a,
-  			  "Task A",
-  			  ( configMINIMAL_STACK_SIZE * 3 ),
-  			  NULL,
-			  tskIDLE_PRIORITY,
-  			  NULL
-  		  	  );
+	xTaskCreate(
+				task_c,
+				"task_c",
+				( configMINIMAL_STACK_SIZE * 3 ),
+				NULL,
+				tskIDLE_PRIORITY,
+				NULL
+				);
 
-  xTaskCreate(
-  		  	  task_b,
-  			  "Task B",
-  			  ( configMINIMAL_STACK_SIZE * 3 ),
-  			  NULL,
-  			  tskIDLE_PRIORITY,
-  			  NULL
-  		  	  );
+	xTaskCreate(
+				task_d,
+				"task_d",
+				( configMINIMAL_STACK_SIZE * 3 ),
+				NULL,
+				tskIDLE_PRIORITY,
+				NULL
+				);
 
-  xTaskCreate(
-			  task_c,
-			  "Task C",
-			  ( configMINIMAL_STACK_SIZE * 3 ),
-			  NULL,
-			  tskIDLE_PRIORITY,
-			  NULL
-			  );
-
-  xTaskCreate(
-			  task_d,
-			  "Task D",
-			  ( configMINIMAL_STACK_SIZE * 3 ),
-			  NULL,
-			  tskIDLE_PRIORITY,
-			  NULL
-			  );
-*/
-  vTaskStartScheduler();
+	vTaskStartScheduler();
 
 
 
-  while (1)
-  {
-  }
+	while (1)
+	{
+	}
 }
 
 
