@@ -11,13 +11,11 @@
 #include <stdint.h>
 #include <stdarg.h>
 
-uint32_t log_init(void);
-uint32_t log_deinit(void);
+void log_init(void);
+void log_deinit(void);
 uint32_t log_info(const char * s, ...);
 uint32_t log_warning(const char * s, ...);
 uint32_t log_error(const char * s, ...);
-uint32_t echo_back(const char c);
-
 
 #endif /* INC_LOG_H_ */
 

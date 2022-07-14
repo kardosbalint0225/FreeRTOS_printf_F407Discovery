@@ -16,13 +16,13 @@ extern "C" {
 #endif
 
 #include <stdint.h>
-#include <stdbool.h>
 
 void RTC_Init(void);
+void RTC_Deinit(void);
 void RTC_GetTime(uint8_t *hours, uint8_t *minutes, uint8_t *seconds);
-bool RTC_SetTime(uint8_t hours, uint8_t minutes, uint8_t seconds);
+void RTC_SetTime(uint8_t hours, uint8_t minutes, uint8_t seconds);
 void RTC_GetDate(uint8_t *day, uint8_t *month, uint8_t *year);
-bool RTC_SetDate(uint8_t day, uint8_t month, uint8_t year);
+void RTC_SetDate(uint8_t day, uint8_t month, uint8_t year);
 
 #ifdef __cplusplus
 }

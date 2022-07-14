@@ -9,23 +9,19 @@
   ******************************************************************************
   */
 #include "rtc.h"
-#include <stdlib.h>
-#include <stdio.h>
 #include "stm32f4xx_hal.h"
-#include "main.h"
 
 RTC_HandleTypeDef hrtc;
+
+static void RTC_MspInit(RTC_HandleTypeDef* hrtc);
+static void RTC_MspDeInit(RTC_HandleTypeDef* hrtc);
 
 /* RTC init function */
 void RTC_Init(void)
 {
-	char *time     = __TIME__;
-	char hours[]   = { time[0], time[1] };
-	char minutes[] = { time[3], time[4] };
-	char seconds[] = { time[6], time[7] };
-
 	RTC_TimeTypeDef sTime    = {0};
 	RTC_DateTypeDef sDate    = {0};
+	HAL_StatusTypeDef ret;
 
 	/** Initialize RTC Only	*/
 	hrtc.Instance            = RTC;
@@ -36,65 +32,90 @@ void RTC_Init(void)
 	hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
 	hrtc.Init.OutPutType     = RTC_OUTPUT_TYPE_OPENDRAIN;
 
-	if (HAL_RTC_Init(&hrtc) != HAL_OK) {
-		Error_Handler();
-	}
+	ret = HAL_RTC_RegisterCallback(&hrtc, HAL_RTC_MSPINIT_CB_ID, RTC_MspInit);
+	assert_param(HAL_OK == ret);
+
+	ret = HAL_RTC_RegisterCallback(&hrtc, HAL_RTC_MSPDEINIT_CB_ID, RTC_MspDeInit);
+	assert_param(HAL_OK == ret);
+
+	ret = HAL_RTC_Init(&hrtc);
+	assert_param(HAL_OK == ret);
 
 	/** Initialize RTC and set the Time and Date */
-	sTime.Hours              = (uint8_t)strtoul(hours,   NULL, 10);
-	sTime.Minutes            = (uint8_t)strtoul(minutes, NULL, 10);
-	sTime.Seconds            = (uint8_t)strtoul(seconds, NULL, 10);
+	sTime.Hours              = 12;
+	sTime.Minutes            = 0;
+	sTime.Seconds            = 0;
 	sTime.DayLightSaving     = RTC_DAYLIGHTSAVING_NONE;
 	sTime.StoreOperation     = RTC_STOREOPERATION_RESET;
 
-	if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN) != HAL_OK) {
-		Error_Handler();
-	}
+	ret = HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
 
 	sDate.WeekDay            = RTC_WEEKDAY_SATURDAY;
 	sDate.Month              = RTC_MONTH_JANUARY;
 	sDate.Date               = 1;
 	sDate.Year               = 22;
 
-	if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN) != HAL_OK) {
-		Error_Handler();
-	}
+	ret = HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
 }
 
-void HAL_RTC_MspInit(RTC_HandleTypeDef* rtcHandle)
+static void RTC_MspInit(RTC_HandleTypeDef* hrtc)
 {
 	RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+	HAL_StatusTypeDef ret;
 
-	if (rtcHandle->Instance == RTC) {
+	/** Initializes the peripherals clock */
+	PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
+	PeriphClkInitStruct.RTCClockSelection    = RCC_RTCCLKSOURCE_LSI;
 
-		/** Initializes the peripherals clock */
-		PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
-		PeriphClkInitStruct.RTCClockSelection    = RCC_RTCCLKSOURCE_LSI;
+	ret = HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct);
+	assert_param(HAL_OK == ret);
 
-		if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct) != HAL_OK) {
-			Error_Handler();
-		}
-
-		/* RTC clock enable */
-		__HAL_RCC_RTC_ENABLE();
-	}
+	/* RTC clock enable */
+	__HAL_RCC_RTC_ENABLE();
 }
 
-void HAL_RTC_MspDeInit(RTC_HandleTypeDef* rtcHandle)
+void RTC_Deinit(void)
 {
-	if (rtcHandle->Instance == RTC) {
-		/* Peripheral clock disable */
-		__HAL_RCC_RTC_DISABLE();
-	}
+	HAL_StatusTypeDef ret;
+
+	ret = HAL_RTC_DeInit(&hrtc);
+	assert_param(HAL_OK == ret);
+
+	ret = HAL_RTC_UnRegisterCallback(&hrtc, HAL_RTC_MSPINIT_CB_ID);
+	assert_param(HAL_OK == ret);
+
+	ret = HAL_RTC_UnRegisterCallback(&hrtc, HAL_RTC_MSPDEINIT_CB_ID);
+	assert_param(HAL_OK == ret);
+}
+
+static void RTC_MspDeInit(RTC_HandleTypeDef* hrtc)
+{
+	RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
+	HAL_StatusTypeDef ret;
+
+	PeriphClkInitStruct.PeriphClockSelection = RCC_PERIPHCLK_RTC;
+	PeriphClkInitStruct.RTCClockSelection    = RCC_RTCCLKSOURCE_NO_CLK;
+
+	ret = HAL_RCCEx_PeriphCLKConfig(&PeriphClkInitStruct);
+	assert_param(HAL_OK == ret);
+
+	/* Peripheral clock disable */
+	__HAL_RCC_RTC_DISABLE();
 }
 
 void RTC_GetTime(uint8_t *hours, uint8_t *minutes, uint8_t *seconds)
 {
 	RTC_TimeTypeDef stime = {0};
 	RTC_DateTypeDef sdate = {0};
+	HAL_StatusTypeDef ret;
 
-	HAL_RTC_GetTime(&hrtc, &stime, RTC_FORMAT_BIN);
-	HAL_RTC_GetDate(&hrtc, &sdate, RTC_FORMAT_BIN);
+	ret = HAL_RTC_GetTime(&hrtc, &stime, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
+
+	ret = HAL_RTC_GetDate(&hrtc, &sdate, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
 
 	*hours   = stime.Hours;
 	*minutes = stime.Minutes;
@@ -105,52 +126,58 @@ void RTC_GetDate(uint8_t *day, uint8_t *month, uint8_t *year)
 {
 	RTC_TimeTypeDef stime = {0};
 	RTC_DateTypeDef sdate = {0};
+	HAL_StatusTypeDef ret;
 
-	HAL_RTC_GetTime(&hrtc, &stime, RTC_FORMAT_BIN);
-	HAL_RTC_GetDate(&hrtc, &sdate, RTC_FORMAT_BIN);
+	ret = HAL_RTC_GetTime(&hrtc, &stime, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
+
+	ret = HAL_RTC_GetDate(&hrtc, &sdate, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
 
 	*day   = sdate.Date;
 	*month = sdate.Month;
 	*year  = sdate.Year;
 }
 
-bool RTC_SetTime(uint8_t hours, uint8_t minutes, uint8_t seconds)
+void RTC_SetTime(uint8_t hours, uint8_t minutes, uint8_t seconds)
 {
 	RTC_TimeTypeDef stime = {0};
 	RTC_DateTypeDef sdate = {0};
-	bool retv = true;
+	HAL_StatusTypeDef ret;
 
-	HAL_RTC_GetTime(&hrtc, &stime, RTC_FORMAT_BIN);
-	HAL_RTC_GetDate(&hrtc, &sdate, RTC_FORMAT_BIN);
+	ret = HAL_RTC_GetTime(&hrtc, &stime, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
+
+	ret = HAL_RTC_GetDate(&hrtc, &sdate, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
 
 	stime.Hours    = hours;
 	stime.Minutes  = minutes;
 	stime.Seconds  = seconds;
 
-	if (HAL_OK != HAL_RTC_SetTime(&hrtc, &stime, RTC_FORMAT_BIN)) {
-		retv = false;
-	}
-
-	return retv;
+	ret = HAL_RTC_SetTime(&hrtc, &stime, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
 }
 
-bool RTC_SetDate(uint8_t day, uint8_t month, uint8_t year)
+void RTC_SetDate(uint8_t day, uint8_t month, uint8_t year)
 {
 	RTC_TimeTypeDef stime = {0};
 	RTC_DateTypeDef sdate = {0};
-	bool retv = true;
+	HAL_StatusTypeDef ret;
 
-	HAL_RTC_GetTime(&hrtc, &stime, RTC_FORMAT_BIN);
-	HAL_RTC_GetDate(&hrtc, &sdate, RTC_FORMAT_BIN);
+	ret = HAL_RTC_GetTime(&hrtc, &stime, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
+
+	ret = HAL_RTC_GetDate(&hrtc, &sdate, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
 
 	sdate.Date   = day;
 	sdate.Month  = month;
 	sdate.Year   = year;
 
-	if (HAL_OK != HAL_RTC_SetDate(&hrtc, &sdate, RTC_FORMAT_BIN)) {
-		retv = false;
-	}
-
-	return retv;
+	ret = HAL_RTC_SetDate(&hrtc, &sdate, RTC_FORMAT_BIN);
+	assert_param(HAL_OK == ret);
 }
+
+
 

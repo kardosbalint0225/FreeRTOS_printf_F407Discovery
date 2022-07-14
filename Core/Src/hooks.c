@@ -11,6 +11,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "main.h"
+#include "error_handler.h"
 
 
 /* GetIdleTaskMemory prototype (linked to static allocation support) */

@@ -9,8 +9,7 @@
   ******************************************************************************
   */
 #include "gpio.h"
-#include "main.h"
-#include "stm32f4xx.h"
+#include "stm32f4xx_hal.h"
 
 void GPIO_Init(void)
 {
