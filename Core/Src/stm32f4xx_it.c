@@ -13,6 +13,7 @@
 extern DMA_HandleTypeDef hdma_usart2_tx;
 extern UART_HandleTypeDef huart2;
 extern TIM_HandleTypeDef htim7;
+extern TIM_HandleTypeDef htim2;
 
 
 /******************************************************************************/
@@ -112,3 +113,10 @@ void TIM7_IRQHandler(void)
 	HAL_TIM_IRQHandler(&htim7);
 }
 
+/**
+  * @brief This function handles TIM2 global interrupt.
+  */
+void TIM2_IRQHandler(void)
+{
+	HAL_TIM_IRQHandler(&htim2);
+}

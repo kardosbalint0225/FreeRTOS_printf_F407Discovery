@@ -17,6 +17,8 @@
 #include "event_groups.h"
 
 #include "log.h"
+#include "cli.h"
+#include "FreeRTOS_CLI.h"
 
 #include "SEGGER_SYSVIEW.h"
 
@@ -68,7 +70,7 @@ void task_d(void *params)
 //		echo_back('\r');
 //		vTaskDelay(pdMS_TO_TICKS(100));
 //		echo_back('\n');
-//		vTaskDelay(pdMS_TO_TICKS(1000));
+		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
 
@@ -89,7 +91,7 @@ void task_e(void *params)
 int main(void)
 {
 	uwTickPrio = TICK_INT_PRIORITY; 	/**< bugfix: stm32f4xx_hal.c initializes this value to 16 */
-	 	 	 	 	 	 	 	 	 	/**< 	 assert_param will fail */
+	 	 	 	 	 	 	 	 	 	/**< 	 	 assert_param will fail */
 	HAL_Init();
 	SystemClock_Config();
 	SEGGER_SYSVIEW_Conf();
@@ -97,6 +99,7 @@ int main(void)
 	GPIO_Init();
 
 	log_init();
+	cli_init(FreeRTOS_CLIGetOutputBuffer(), FreeRTOS_CLIProcessCommand);
 
 	xTaskCreate(
 				task_a,
@@ -107,41 +110,41 @@ int main(void)
 				NULL
 				);
 
-	xTaskCreate(
-				task_b,
-				"task_b",
-				( configMINIMAL_STACK_SIZE * 3 ),
-				NULL,
-				tskIDLE_PRIORITY,
-				NULL
-				);
-
-	xTaskCreate(
-				task_c,
-				"task_c",
-				( configMINIMAL_STACK_SIZE * 3 ),
-				NULL,
-				tskIDLE_PRIORITY,
-				NULL
-				);
-
-	xTaskCreate(
-				task_d,
-				"task_d",
-				( configMINIMAL_STACK_SIZE * 3 ),
-				NULL,
-				tskIDLE_PRIORITY,
-				NULL
-				);
-
-	xTaskCreate(
-				task_e,
-				"task_e",
-				( configMINIMAL_STACK_SIZE * 3 ),
-				NULL,
-				tskIDLE_PRIORITY,
-				NULL
-				);
+//	xTaskCreate(
+//				task_b,
+//				"task_b",
+//				( configMINIMAL_STACK_SIZE * 3 ),
+//				NULL,
+//				tskIDLE_PRIORITY,
+//				NULL
+//				);
+//
+//	xTaskCreate(
+//				task_c,
+//				"task_c",
+//				( configMINIMAL_STACK_SIZE * 3 ),
+//				NULL,
+//				tskIDLE_PRIORITY,
+//				NULL
+//				);
+//
+//	xTaskCreate(
+//				task_d,
+//				"task_d",
+//				( configMINIMAL_STACK_SIZE * 3 ),
+//				NULL,
+//				tskIDLE_PRIORITY,
+//				NULL
+//				);
+//
+//	xTaskCreate(
+//				task_e,
+//				"task_e",
+//				( configMINIMAL_STACK_SIZE * 3 ),
+//				NULL,
+//				tskIDLE_PRIORITY,
+//				NULL
+//				);
 
 	vTaskStartScheduler();
 

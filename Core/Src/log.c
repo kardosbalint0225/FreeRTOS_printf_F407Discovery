@@ -17,29 +17,29 @@ void log_deinit(void)
 	log_and_cli_io_deinit();
 }
 
-uint32_t log_info(const char * s, ...)
+int log_info(const char * s, ...)
 {
 	va_list va;
 	va_start(va, s);
-	uint32_t len = log_(s, "INFO", va);
+	int len = log_(s, "INFO", va);
 	va_end(va);
 	return len;
 }
 
-uint32_t log_warning(const char * s, ...)
+int log_warning(const char * s, ...)
 {
 	va_list va;
 	va_start(va, s);
-	uint32_t len = log_(s, "WARNING", va);
+	int len = log_(s, "WARNING", va);
 	va_end(va);
 	return len;
 }
 
-uint32_t log_error(const char * s, ...)
+int log_error(const char * s, ...)
 {
 	va_list va;
 	va_start(va, s);
-	uint32_t len = log_(s, "ERROR", va);
+	int len = log_(s, "ERROR", va);
 	va_end(va);
 	return len;
 }

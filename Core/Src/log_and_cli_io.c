@@ -16,6 +16,8 @@
 #include "semphr.h"
 #include "event_groups.h"
 
+#include <string.h>
+
 typedef struct {
 	uint8_t *pbuf;
 	uint8_t  size;
@@ -28,37 +30,55 @@ static void UART2_MspDeInit(UART_HandleTypeDef* huart);
 static void UART2_TxCpltCallback(UART_HandleTypeDef *huart);
 static void UART2_RxCpltCallback(UART_HandleTypeDef *huart);
 
-static SemaphoreHandle_t uart_tx_complete_semaphore = NULL;
-static SemaphoreHandle_t uart_rx_complete_semaphore = NULL;
-static QueueHandle_t uart_tx_available_queue		= NULL;
-static QueueHandle_t uart_tx_ready_queue			= NULL;
-static QueueHandle_t uart_tx_pending_queue 			= NULL;
-static TaskHandle_t  h_uart_write					= NULL;
+static SemaphoreHandle_t uart_tx_complete_semaphore_handle = NULL;
+static StaticSemaphore_t uart_tx_complete_semaphore_storage;
+SemaphoreHandle_t uart_rx_complete_semaphore_handle = NULL;
+static StaticSemaphore_t uart_rx_complete_semaphore_storage;
+
+#define UART_TX_AVAILABLE_QUEUE_LENGTH				8
+static StaticQueue_t uart_tx_available_struct;
+static uint8_t       uart_tx_available_queue_storage[UART_TX_AVAILABLE_QUEUE_LENGTH * sizeof(uint8_t *)];
+static QueueHandle_t uart_tx_available_queue_handle	= NULL;
+
+#define UART_TX_READY_QUEUE_LENGTH					8
+static StaticQueue_t uart_tx_ready_struct;
+static uint8_t		 uart_tx_ready_queue_storage[UART_TX_READY_QUEUE_LENGTH * sizeof(uart_tx_data_t)];
+static QueueHandle_t uart_tx_ready_queue_handle		= NULL;
+
+#define UART_TX_PENDING_QUEUE_LENGTH				1
+static StaticQueue_t uart_tx_pending_struct;
+static uint8_t		 uart_tx_pending_queue_storage[UART_TX_PENDING_QUEUE_LENGTH * sizeof(uint8_t *)];
+static QueueHandle_t uart_tx_pending_queue_handle 	= NULL;
+
+#define UART_WRITE_TASK_STACKSIZE					1024
+static StackType_t   uart_write_task_stack[UART_WRITE_TASK_STACKSIZE];
+static StaticTask_t  uart_write_task_tcb;
+static TaskHandle_t  uart_write_task_handle			= NULL;
 
 UART_HandleTypeDef huart2;
 DMA_HandleTypeDef  hdma_usart2_tx;
 
-static uint8_t uart_tx_buffer[128*8];
+static uint8_t uart_tx_buffer[2048*8];
 
-void uart_write_task(void *params)
+static void uart_write_task(void *params)
 {
 
 	for ( ;; )
 	{
-		if (pdPASS == xSemaphoreTake(uart_tx_complete_semaphore, portMAX_DELAY)) {
+		if (pdPASS == xSemaphoreTake(uart_tx_complete_semaphore_handle, portMAX_DELAY)) {
 			uint8_t *released = NULL;
 
-			xQueueReceive(uart_tx_pending_queue, &released, 0);
-			xQueueSend(uart_tx_available_queue, &released, 0);
+			xQueueReceive(uart_tx_pending_queue_handle, &released, 0);
+			xQueueSend(uart_tx_available_queue_handle, &released, 0);
 
 			uart_tx_data_t uart_tx_data = {
 				.pbuf = NULL,
 				.size = 0,
 			};
 
-			if (pdPASS == xQueueReceive(uart_tx_ready_queue, &uart_tx_data, portMAX_DELAY)) {
+			if (pdPASS == xQueueReceive(uart_tx_ready_queue_handle, &uart_tx_data, portMAX_DELAY)) {
 				HAL_UART_Transmit_DMA(&huart2, uart_tx_data.pbuf, uart_tx_data.size);
-				xQueueSend(uart_tx_pending_queue, &uart_tx_data.pbuf, 0);
+				xQueueSend(uart_tx_pending_queue_handle, &uart_tx_data.pbuf, 0);
 			}
 		}
 	}
@@ -69,35 +89,60 @@ void log_and_cli_io_init(void)
 	RTC_Init();
 	UART2_Init();
 
-	vSemaphoreCreateBinary(uart_tx_complete_semaphore);
-	assert_param(NULL != uart_tx_complete_semaphore);
+	uart_tx_complete_semaphore_handle = xSemaphoreCreateBinaryStatic(&uart_tx_complete_semaphore_storage);
+	//vSemaphoreCreateBinary(uart_tx_complete_semaphore_handle);
+	assert_param(NULL != uart_tx_complete_semaphore_handle);
+	xSemaphoreGive(uart_tx_complete_semaphore_handle);	// ????????????????
 
-	vSemaphoreCreateBinary(uart_rx_complete_semaphore);
-	assert_param(NULL != uart_rx_complete_semaphore);
-	xSemaphoreTake(uart_rx_complete_semaphore, 0);
+	uart_rx_complete_semaphore_handle = xSemaphoreCreateBinaryStatic(&uart_rx_complete_semaphore_storage);
+	assert_param(NULL != uart_rx_complete_semaphore_handle);
+	xSemaphoreTake(uart_rx_complete_semaphore_handle, 0);
 
-	uart_tx_pending_queue    = xQueueCreate(1, sizeof(uint8_t *));
-	assert_param(NULL != uart_tx_pending_queue);
+	uart_tx_pending_queue_handle    = xQueueCreateStatic(
+										UART_TX_PENDING_QUEUE_LENGTH,
+										sizeof(uint8_t *),
+										uart_tx_pending_queue_storage,
+										&uart_tx_pending_struct);
+	assert_param(NULL != uart_tx_pending_queue_handle);
 
-	uart_tx_available_queue  = xQueueCreate(8, sizeof(uint8_t *));
-	assert_param(NULL != uart_tx_available_queue);
+	uart_tx_available_queue_handle  = xQueueCreateStatic(
+										UART_TX_AVAILABLE_QUEUE_LENGTH,
+										sizeof(uint8_t *),
+										uart_tx_available_queue_storage,
+										&uart_tx_available_struct);
+	assert_param(NULL != uart_tx_available_queue_handle);
 
-	uart_tx_ready_queue      = xQueueCreate(8, sizeof(uart_tx_data_t));
-	assert_param(NULL != uart_tx_ready_queue);
+	uart_tx_ready_queue_handle      = xQueueCreateStatic(
+										UART_TX_READY_QUEUE_LENGTH,
+										sizeof(uart_tx_data_t),
+										uart_tx_ready_queue_storage,
+										&uart_tx_ready_struct);
+	assert_param(NULL != uart_tx_ready_queue_handle);
 
 	for (uint8_t i = 0; i < 8; i++) {
-		uint8_t *buffer_address = &uart_tx_buffer[i*128];
-		xQueueSend(uart_tx_available_queue, &buffer_address, 0);
+		uint8_t *buffer_address = &uart_tx_buffer[i*2048];
+		xQueueSend(uart_tx_available_queue_handle, &buffer_address, 0);
 	}
 
-	BaseType_t ret = xTaskCreate(
-					uart_write_task,
-					"UART write",
-					( configMINIMAL_STACK_SIZE * 3 ),
-					NULL,
-					tskIDLE_PRIORITY+1,
-					&h_uart_write
-					);
+//	uart_write_task_handle 			= xTaskCreateStatic(
+//										uart_write_task,
+//										"UART write",
+//										UART_WRITE_TASK_STACKSIZE,
+//										NULL,
+//										tskIDLE_PRIORITY+1,
+//										uart_write_task_stack,
+//										&uart_write_task_tcb);
+//
+//	assert_param(NULL != uart_write_task_handle);
+
+	BaseType_t ret 					= xTaskCreate(
+										uart_write_task,
+										"UART write",
+										(configMINIMAL_STACK_SIZE * 3),
+										NULL,
+										tskIDLE_PRIORITY+1,
+										&uart_write_task_handle
+										);
 
 	assert_param(pdPASS == ret);
 }
@@ -107,11 +152,12 @@ void log_and_cli_io_deinit(void)
 	UART2_Deinit();
 	RTC_Deinit();
 
-	vTaskDelete(h_uart_write);
-	vQueueDelete(uart_tx_available_queue);
-	vQueueDelete(uart_tx_ready_queue);
-	vQueueDelete(uart_tx_pending_queue);
-	vSemaphoreDelete(uart_tx_complete_semaphore);
+	vTaskDelete(uart_write_task_handle);
+	vQueueDelete(uart_tx_available_queue_handle);
+	vQueueDelete(uart_tx_ready_queue_handle);
+	vQueueDelete(uart_tx_pending_queue_handle);
+	vSemaphoreDelete(uart_tx_complete_semaphore_handle);
+	vSemaphoreDelete(uart_rx_complete_semaphore_handle);
 }
 
 /**
@@ -271,7 +317,7 @@ static void UART2_MspDeInit(UART_HandleTypeDef* huart)
 static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
 {
 	portBASE_TYPE higher_priority_task_woken;
-	xSemaphoreGiveFromISR(uart_tx_complete_semaphore, &higher_priority_task_woken);
+	xSemaphoreGiveFromISR(uart_tx_complete_semaphore_handle, &higher_priority_task_woken);
 
 	portYIELD_FROM_ISR(higher_priority_task_woken);
 }
@@ -286,7 +332,7 @@ static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
 static void UART2_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	portBASE_TYPE higher_priority_task_woken;
-	xSemaphoreGiveFromISR(uart_rx_complete_semaphore, &higher_priority_task_woken);
+	xSemaphoreGiveFromISR(uart_rx_complete_semaphore_handle, &higher_priority_task_woken);
 
 	portYIELD_FROM_ISR(higher_priority_task_woken);
 }
@@ -305,24 +351,26 @@ uint32_t log_(const char * format, const char * type, va_list va)
 	uint8_t hours;
 	uint8_t minutes;
 	uint8_t seconds;
-	uint8_t len = 0;
 
 	uart_tx_data_t data = {
 		.pbuf = NULL,
 		.size = 0,
 	};
 
-	if ( pdPASS == xQueueReceive(uart_tx_available_queue, &data.pbuf, portMAX_DELAY) ) {
+	if ( pdPASS == xQueueReceive(uart_tx_available_queue_handle, &data.pbuf, portMAX_DELAY) ) {
 
 		RTC_GetTime(&hours, &minutes, &seconds);
 
-		len += (uint8_t)snprintf((char *)data.pbuf, 128, "[%02d:%02d:%02d] %s: ", hours, minutes, seconds, type);
-		data.size = len + (uint8_t)vsnprintf((char *)(data.pbuf+len), 128-len, format, va);
+		int len = snprintf((char *)data.pbuf, 2048, "[%02d:%02d:%02d] %s: ", hours, minutes, seconds, type);
+		assert_param(len < 2048);
 
-		xQueueSend(uart_tx_ready_queue, &data, portMAX_DELAY);
+		data.size = (uint8_t)len + (uint8_t)vsnprintf((char *)(data.pbuf+len), 2048-len, format, va);
+		assert_param(data.size <= 2048);
+
+		xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
 	}
 
-	return (uint32_t)len;
+	return (int)data.size;
 }
 
 void cli_io_read(uint8_t *buf, uint16_t size)
@@ -333,6 +381,32 @@ void cli_io_read(uint8_t *buf, uint16_t size)
 
 void cli_io_write(const char * s, uint16_t size)
 {
+	uart_tx_data_t data = {
+		.pbuf = NULL,
+		.size = 0,
+	};
 
+	if ( pdPASS == xQueueReceive(uart_tx_available_queue_handle, &data.pbuf, portMAX_DELAY) ) {
+
+		memcpy(data.pbuf, s, size);
+		data.size = size;
+
+		xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
+	}
 }
+
+bool is_character_received(void)
+{
+	bool ret;
+
+	if (xSemaphoreTake( uart_rx_complete_semaphore_handle, portMAX_DELAY ) == pdPASS ) {
+		ret = true;
+	} else {
+		ret = false;
+	}
+
+	return ret;
+}
+
+
 
