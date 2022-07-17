@@ -11,6 +11,12 @@
 #include "gpio.h"
 #include "stm32f4xx_hal.h"
 
+/**
+  * @brief	Initializes LED and pushbutton related GPIOs
+  * @param  None
+  * @retval None
+  * @note
+  */
 void GPIO_Init(void)
 {
 	GPIO_InitTypeDef GPIO_InitStruct = {0};

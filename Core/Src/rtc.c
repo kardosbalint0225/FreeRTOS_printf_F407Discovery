@@ -16,7 +16,11 @@ RTC_HandleTypeDef hrtc;
 static void RTC_MspInit(RTC_HandleTypeDef* hrtc);
 static void RTC_MspDeInit(RTC_HandleTypeDef* hrtc);
 
-/* RTC init function */
+/**
+  * @brief  Initializes the RTC peripheral
+  * @param	None
+  * @retval None
+  */
 void RTC_Init(void)
 {
 	RTC_TimeTypeDef sTime    = {0};
@@ -60,6 +64,14 @@ void RTC_Init(void)
 	assert_param(HAL_OK == ret);
 }
 
+/**
+  * @brief  Initializes the RTC peripheral low-level
+  * @param	hrtc pointer to the RTC_HandleTypeDef structure
+  * @retval None
+  * @note   The RTC peripheral uses LSI as its clock source 
+  * @note 	This function is called by the HAL library when
+  * 		RTC_Init functions is called
+  */
 static void RTC_MspInit(RTC_HandleTypeDef* hrtc)
 {
 	RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
@@ -76,6 +88,11 @@ static void RTC_MspInit(RTC_HandleTypeDef* hrtc)
 	__HAL_RCC_RTC_ENABLE();
 }
 
+/**
+  * @brief  Deinitializes the RTC peripheral
+  * @param	None
+  * @retval None
+  */
 void RTC_Deinit(void)
 {
 	HAL_StatusTypeDef ret;
@@ -90,6 +107,13 @@ void RTC_Deinit(void)
 	assert_param(HAL_OK == ret);
 }
 
+/**
+  * @brief  Deinitializes the RTC peripheral low-level
+  * @param	hrtc pointer to the RTC_HandleTypeDef structure
+  * @retval None
+  * @note   This function is called by the HAL library when
+  * 		RTC_Deinit functions is called
+  */
 static void RTC_MspDeInit(RTC_HandleTypeDef* hrtc)
 {
 	RCC_PeriphCLKInitTypeDef PeriphClkInitStruct = {0};
@@ -105,6 +129,13 @@ static void RTC_MspDeInit(RTC_HandleTypeDef* hrtc)
 	__HAL_RCC_RTC_DISABLE();
 }
 
+/**
+  * @brief  Gets the current time from the RTC peripheral
+  * @param	hours points where the hours value can be stored
+  * @param  minutes points where the minutes value can be stored
+  * @param  seconds points where the seconds value can be stored
+  * @retval None
+  */
 void RTC_GetTime(uint8_t *hours, uint8_t *minutes, uint8_t *seconds)
 {
 	RTC_TimeTypeDef stime = {0};
@@ -122,6 +153,13 @@ void RTC_GetTime(uint8_t *hours, uint8_t *minutes, uint8_t *seconds)
 	*seconds = stime.Seconds;
 }
 
+/**
+  * @brief  Gets the current date from the RTC peripheral
+  * @param	day points where the day value can be stored
+  * @param  month points where the month value can be stored
+  * @param  year points where the year value can be stored
+  * @retval None
+  */
 void RTC_GetDate(uint8_t *day, uint8_t *month, uint8_t *year)
 {
 	RTC_TimeTypeDef stime = {0};
@@ -139,6 +177,13 @@ void RTC_GetDate(uint8_t *day, uint8_t *month, uint8_t *year)
 	*year  = sdate.Year;
 }
 
+/**
+  * @brief  Sets the time to the RTC peripheral
+  * @param	hours value to be set
+  * @param  minutes value to be set
+  * @param  seconds value to be set
+  * @retval None
+  */
 void RTC_SetTime(uint8_t hours, uint8_t minutes, uint8_t seconds)
 {
 	RTC_TimeTypeDef stime = {0};
@@ -159,6 +204,13 @@ void RTC_SetTime(uint8_t hours, uint8_t minutes, uint8_t seconds)
 	assert_param(HAL_OK == ret);
 }
 
+/**
+  * @brief  Sets the date to the RTC peripheral
+  * @param	day value to be set
+  * @param  month value to be set
+  * @param  year value to be set
+  * @retval None
+  */
 void RTC_SetDate(uint8_t day, uint8_t month, uint8_t year)
 {
 	RTC_TimeTypeDef stime = {0};

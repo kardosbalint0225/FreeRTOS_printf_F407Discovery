@@ -58,11 +58,11 @@ void cli_init(char *output_buffer, cli_callback_t cli_callback)
 	assert_param(NULL != cli_callback);
 
 	cli_task_handle = xTaskCreateStatic(
-						cli_task,							/* The task that implements the command console. */
-						"CLI",								/* Text name assigned to the task.  This is just to assist debugging.  The kernel does not use this name itself. */
-						CLI_TASK_STACKSIZE,					/* The size of the stack allocated to the task. */
-						NULL,								/* The parameter is not used, so NULL is passed. */
-						tskIDLE_PRIORITY,					/* The priority allocated to the task. */
+						cli_task,			/* The task that implements the command console. */
+						"CLI",				/* Text name assigned to the task.  This is just to assist debugging.  The kernel does not use this name itself. */
+						CLI_TASK_STACKSIZE,	/* The size of the stack allocated to the task. */
+						NULL,				/* The parameter is not used, so NULL is passed. */
+						tskIDLE_PRIORITY,	/* The priority allocated to the task. */
 						cli_task_stack,
 						&cli_task_tcb);
 

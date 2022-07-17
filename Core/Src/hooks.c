@@ -10,8 +10,6 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
-#include "main.h"
-#include "error_handler.h"
 
 
 /* GetIdleTaskMemory prototype (linked to static allocation support) */
@@ -33,25 +31,24 @@ void vApplicationDaemonTaskStartupHook( void )
 }
 
 /* Functions needed when configGENERATE_RUN_TIME_STATS is on */
-__weak void configureTimerForRunTimeStats(void)
-{
+//__weak void configureTimerForRunTimeStats(void)
+//{
+//
+//}
 
-}
+//__weak unsigned long getRunTimeCounterValue(void)
+//{
+//	return 0;
+//}
 
-__weak unsigned long getRunTimeCounterValue(void)
-{
-	return 0;
-}
-
-__weak void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
+void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
    /* Run time stack overflow checking is performed if
    configCHECK_FOR_STACK_OVERFLOW is defined to 1 or 2. This hook function is
    called if a stack overflow is detected. */
-   Error_Handler();
 }
 
-__weak void vApplicationMallocFailedHook(void)
+void vApplicationMallocFailedHook(void)
 {
    /* vApplicationMallocFailedHook() will only be called if
    configUSE_MALLOC_FAILED_HOOK is set to 1 in FreeRTOSConfig.h. It is a hook
@@ -63,7 +60,6 @@ __weak void vApplicationMallocFailedHook(void)
    FreeRTOSConfig.h, and the xPortGetFreeHeapSize() API function can be used
    to query the size of free heap space that remains (although it does not
    provide information on how the remaining heap might be fragmented). */
-	Error_Handler();
 }
 
 static StaticTask_t xIdleTaskTCBBuffer;

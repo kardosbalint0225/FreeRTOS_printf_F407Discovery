@@ -30,6 +30,7 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 	uint32_t              uwTimclock = 0;
 	uint32_t              uwPrescalerValue = 0;
 	uint32_t              pFLatency;
+
 	/*Configure the TIM7 IRQ priority */
 	HAL_NVIC_SetPriority(TIM7_IRQn, TickPriority ,0);
 
@@ -61,14 +62,19 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 	htim7.Init.ClockDivision = 0;
 	htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
 
-	if(HAL_TIM_Base_Init(&htim7) == HAL_OK)	{
-		HAL_TIM_RegisterCallback(&htim7, HAL_TIM_PERIOD_ELAPSED_CB_ID, TIM7_PeriodElapsedCallback);
-		/* Start the TIM time Base generation in interrupt mode */
-		return HAL_TIM_Base_Start_IT(&htim7);
-	}
+	HAL_StatusTypeDef ret;
+	ret = HAL_TIM_Base_Init(&htim7);
+	assert_param(HAL_OK == ret);
+	
+	ret = HAL_TIM_RegisterCallback(&htim7, HAL_TIM_PERIOD_ELAPSED_CB_ID, TIM7_PeriodElapsedCallback);
+	assert_param(HAL_OK == ret);
 
+	/* Start the TIM time Base generation in interrupt mode */
+	ret = HAL_TIM_Base_Start_IT(&htim7);
+	assert_param(HAL_OK == ret);
+	
 	/* Return function status */
-	return HAL_ERROR;
+	return ret;
 }
 
 /**
@@ -98,8 +104,8 @@ void HAL_ResumeTick(void)
 /**
   * @brief  Period elapsed callback in non blocking mode
   * @note   This function is called  when TIM7 interrupt took place, inside
-  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
-  * a global variable "uwTick" used as application time base.
+  * 		HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * 		a global variable "uwTick" used as application time base.
   * @param  htim : TIM handle
   * @retval None
   */

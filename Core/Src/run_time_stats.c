@@ -10,7 +10,7 @@ TIM_HandleTypeDef htim2;
 volatile uint32_t runtime_stats_timer;
 
 static void TIM2_Init(void);
-static void TIM2_Denit(void);
+static void TIM2_Deinit(void);
 static void TIM2_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 
 /**
