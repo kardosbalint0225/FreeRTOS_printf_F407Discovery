@@ -161,7 +161,7 @@ static const CLI_Command_Definition_t set_time_cmd =
 
 /*-----------------------------------------------------------*/
 
-void vRegisterSampleCLICommands( void )
+void register_commands( void )
 {
 	/* Register all the command line commands defined immediately above. */
 	FreeRTOS_CLIRegisterCommand( &xTaskStats );

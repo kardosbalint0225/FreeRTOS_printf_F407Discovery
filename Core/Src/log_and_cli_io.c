@@ -32,8 +32,11 @@ static void UART2_RxCpltCallback(UART_HandleTypeDef *huart);
 
 static SemaphoreHandle_t uart_tx_complete_semaphore_handle = NULL;
 static StaticSemaphore_t uart_tx_complete_semaphore_storage;
-SemaphoreHandle_t uart_rx_complete_semaphore_handle = NULL;
-static StaticSemaphore_t uart_rx_complete_semaphore_storage;
+
+#define UART_RX_QUEUE_LENGTH						8
+static StaticQueue_t uart_rx_queue_struct;
+static uint8_t		 uart_rx_queue_storage[UART_RX_QUEUE_LENGTH * sizeof(uint8_t)];
+static QueueHandle_t uart_rx_queue_handle			= NULL;
 
 #define UART_TX_AVAILABLE_QUEUE_LENGTH				8
 static StaticQueue_t uart_tx_available_struct;
@@ -59,9 +62,18 @@ UART_HandleTypeDef huart2;
 DMA_HandleTypeDef  hdma_usart2_tx;
 
 static uint8_t uart_tx_buffer[2048*8];
+static uint8_t uart_rx_buffer[4];
 
+
+/**
+  * @brief  UART writer task
+  * @param  params optionally points to data passed on task creation
+  * @retval None
+  * @note	Task that performs the UART TX related jobs.
+  */
 static void uart_write_task(void *params)
 {
+	(void)params;
 
 	for ( ;; )
 	{
@@ -84,19 +96,21 @@ static void uart_write_task(void *params)
 	}
 }
 
+/**
+  * @brief  Initializes the Log and CLI I/O
+  * @param  None
+  * @retval None
+  * @note	This function initializes the UART2 and RTC peripherals,
+  * 		and creates the Log and CLI I/O related tasks, queues and semaphores
+  */
 void log_and_cli_io_init(void)
 {
 	RTC_Init();
 	UART2_Init();
 
 	uart_tx_complete_semaphore_handle = xSemaphoreCreateBinaryStatic(&uart_tx_complete_semaphore_storage);
-	//vSemaphoreCreateBinary(uart_tx_complete_semaphore_handle);
 	assert_param(NULL != uart_tx_complete_semaphore_handle);
-	xSemaphoreGive(uart_tx_complete_semaphore_handle);	// ????????????????
-
-	uart_rx_complete_semaphore_handle = xSemaphoreCreateBinaryStatic(&uart_rx_complete_semaphore_storage);
-	assert_param(NULL != uart_rx_complete_semaphore_handle);
-	xSemaphoreTake(uart_rx_complete_semaphore_handle, 0);
+	xSemaphoreGive(uart_tx_complete_semaphore_handle);
 
 	uart_tx_pending_queue_handle    = xQueueCreateStatic(
 										UART_TX_PENDING_QUEUE_LENGTH,
@@ -119,34 +133,40 @@ void log_and_cli_io_init(void)
 										&uart_tx_ready_struct);
 	assert_param(NULL != uart_tx_ready_queue_handle);
 
+	uart_rx_queue_handle			= xQueueCreateStatic(
+										UART_RX_QUEUE_LENGTH,
+										sizeof(uint8_t),
+										uart_rx_queue_storage,
+										&uart_rx_queue_struct);
+	assert_param(NULL != uart_rx_queue_handle);
+
 	for (uint8_t i = 0; i < 8; i++) {
 		uint8_t *buffer_address = &uart_tx_buffer[i*2048];
 		xQueueSend(uart_tx_available_queue_handle, &buffer_address, 0);
 	}
 
-//	uart_write_task_handle 			= xTaskCreateStatic(
-//										uart_write_task,
-//										"UART write",
-//										UART_WRITE_TASK_STACKSIZE,
-//										NULL,
-//										tskIDLE_PRIORITY+1,
-//										uart_write_task_stack,
-//										&uart_write_task_tcb);
-//
-//	assert_param(NULL != uart_write_task_handle);
-
-	BaseType_t ret 					= xTaskCreate(
+	uart_write_task_handle 			= xTaskCreateStatic(
 										uart_write_task,
 										"UART write",
-										(configMINIMAL_STACK_SIZE * 3),
+										UART_WRITE_TASK_STACKSIZE,
 										NULL,
 										tskIDLE_PRIORITY+1,
-										&uart_write_task_handle
-										);
+										uart_write_task_stack,
+										&uart_write_task_tcb);
 
-	assert_param(pdPASS == ret);
+	assert_param(NULL != uart_write_task_handle);
+
+	HAL_StatusTypeDef ret = HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[0], 1);
+	assert_param(HAL_OK == ret);
 }
 
+/**
+  * @brief  Deinitializes the Log and CLI I/O
+  * @param  None
+  * @retval None
+  * @note	This function deinitializes the UART2 and RTC peripherals,
+  * 		and deletes the Log and CLI I/O related tasks, queues and semaphores
+  */
 void log_and_cli_io_deinit(void)
 {
 	UART2_Deinit();
@@ -156,8 +176,8 @@ void log_and_cli_io_deinit(void)
 	vQueueDelete(uart_tx_available_queue_handle);
 	vQueueDelete(uart_tx_ready_queue_handle);
 	vQueueDelete(uart_tx_pending_queue_handle);
+	vQueueDelete(uart_rx_queue_handle);
 	vSemaphoreDelete(uart_tx_complete_semaphore_handle);
-	vSemaphoreDelete(uart_rx_complete_semaphore_handle);
 }
 
 /**
@@ -317,7 +337,8 @@ static void UART2_MspDeInit(UART_HandleTypeDef* huart)
 static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
 {
 	portBASE_TYPE higher_priority_task_woken;
-	xSemaphoreGiveFromISR(uart_tx_complete_semaphore_handle, &higher_priority_task_woken);
+	BaseType_t ret = xSemaphoreGiveFromISR(uart_tx_complete_semaphore_handle, &higher_priority_task_woken);
+	assert_param(pdTRUE == ret);
 
 	portYIELD_FROM_ISR(higher_priority_task_woken);
 }
@@ -332,7 +353,11 @@ static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
 static void UART2_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	portBASE_TYPE higher_priority_task_woken;
-	xSemaphoreGiveFromISR(uart_rx_complete_semaphore_handle, &higher_priority_task_woken);
+	BaseType_t ret1 = xQueueSendFromISR(uart_rx_queue_handle, &uart_rx_buffer[0], &higher_priority_task_woken);
+	assert_param(pdTRUE == ret1);
+
+	HAL_StatusTypeDef ret2 = HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[0], 1);
+	assert_param(HAL_OK == ret2);
 
 	portYIELD_FROM_ISR(higher_priority_task_woken);
 }
@@ -346,7 +371,7 @@ static void UART2_RxCpltCallback(UART_HandleTypeDef *huart)
   * @note	This function might cause the calling task to go to the blocked state
   * 		if there is no free space in the queue
   */
-uint32_t log_(const char * format, const char * type, va_list va)
+int log_(const char * format, const char * type, va_list va)
 {
 	uint8_t hours;
 	uint8_t minutes;
@@ -367,18 +392,37 @@ uint32_t log_(const char * format, const char * type, va_list va)
 		data.size = (uint8_t)len + (uint8_t)vsnprintf((char *)(data.pbuf+len), 2048-len, format, va);
 		assert_param(data.size <= 2048);
 
-		xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
+		BaseType_t ret = xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
+		assert_param(pdTRUE == ret);
 	}
 
 	return (int)data.size;
 }
 
-void cli_io_read(uint8_t *buf, uint16_t size)
+/**
+  * @brief  Reads one byte from the UART RX queue
+  * @param  ch the byte read from the queue
+  * @retval pdTRUE if the read was successful, pdFALSE otherwise
+  * @note	This function might cause the calling task to go to the blocked state
+  * 		if the queue is empty
+  *
+  */
+uint32_t cli_io_read(uint8_t *ch)
 {
-	HAL_StatusTypeDef ret = HAL_UART_Receive_IT(&huart2, buf, size);
-	assert_param(HAL_OK == ret);
+	BaseType_t ret = xQueueReceive(uart_rx_queue_handle, ch, portMAX_DELAY);
+	assert_param(pdTRUE == ret);
+
+	return (uint32_t)ret;
 }
 
+/**
+  * @brief  Writes text messages used by the CLI task to the UART TX queue
+  * @param  s the const string containing the message to be printed
+  * @param  size of the string
+  * @retval None
+  * @note	This function might cause the calling task to go to the blocked state
+  * 		if the tx available queue is empty or the ready queue is full
+  */
 void cli_io_write(const char * s, uint16_t size)
 {
 	uart_tx_data_t data = {
@@ -391,21 +435,9 @@ void cli_io_write(const char * s, uint16_t size)
 		memcpy(data.pbuf, s, size);
 		data.size = size;
 
-		xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
+		BaseType_t ret = xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
+		assert_param(pdTRUE == ret);
 	}
-}
-
-bool is_character_received(void)
-{
-	bool ret;
-
-	if (xSemaphoreTake( uart_rx_complete_semaphore_handle, portMAX_DELAY ) == pdPASS ) {
-		ret = true;
-	} else {
-		ret = false;
-	}
-
-	return ret;
 }
 
 

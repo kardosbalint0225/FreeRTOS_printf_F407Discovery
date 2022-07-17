@@ -13,35 +13,21 @@
 /* Dimensions the buffer into which input characters are placed. */
 #define cmdMAX_INPUT_SIZE					50
 
-/* Characters are only ever received slowly on the CLI so it is ok to pass
-received characters from the UART interrupt to the task on a queue.  This sets
-the length of the queue used for that purpose. */
-#define cmdRXED_CHARS_QUEUE_LENGTH			( 10 )
-
 /* DEL acts as a backspace. */
 #define cmdASCII_DEL						( 0x7F )
 
-/*
- * The task that implements the command console processing.
- */
+extern void register_commands( void );
 static void cli_task(void *pvParameters);
-
-/*
- * Register the 'standard' sample CLI commands with FreeRTOS+CLI.
- */
-extern void vRegisterSampleCLICommands( void );
-
 static bool is_end_of_line(char ch);
 static void process_command();
 static void process_input(char *received_char);
 
-
-static const char * const welcome_message      = "\r\n\r\nFreeRTOS command server.\r\nType Help to view a list of registered commands.\r\n\r\n>";
-static const char * const pcEndOfOutputMessage = "\r\n[Press ENTER to execute the previous command again]\r\n>";
-static const char * const new_line             = "\r\n";
+static const char * const welcome_message = "\r\n\r\nFreeRTOS command server.\r\nType Help to view a list of registered commands.\r\n\r\n>";
+static const char * const end_message     = "\r\n[Press ENTER to execute the previous command again]\r\n>";
+static const char * const new_line        = "\r\n";
 static char cli_input_buffer[ cmdMAX_INPUT_SIZE ];
+static char *cli_output_buffer = NULL;
 static char last_input_string[ cmdMAX_INPUT_SIZE ];
-static char *cli_output_buffer;
 static uint8_t input_index = 0;
 
 #define CLI_TASK_STACKSIZE			1024
@@ -49,24 +35,28 @@ static StackType_t  cli_task_stack[CLI_TASK_STACKSIZE];
 static StaticTask_t cli_task_tcb;
 static TaskHandle_t cli_task_handle = NULL;
 
-static cli_callback_t commandline_interpreter;
+static cli_callback_t commandline_interpreter = NULL;
 
-extern  SemaphoreHandle_t uart_rx_complete_semaphore_handle;
-
-void cli_init( char *output_buffer, cli_callback_t cli_callback )
+/**
+  * @brief  Initializes the Commandline Interface
+  * @param	output_buffer points to a global buffer where command
+  * 		output string can be stored
+  * @param  cli_callback function pointer points to the command line
+  * 		interpreter function
+  * @retval None
+  * @note   This function will create the CLI task that implements
+  * 		command line processing
+  */
+void cli_init(char *output_buffer, cli_callback_t cli_callback)
 {
-	vRegisterSampleCLICommands();
+	register_commands();
 
-	/* Obtain the address of the output buffer.  Note there is no mutual
-	exclusion on this buffer as it is assumed only one command console
-	interface will be used at any one time. */
-	cli_output_buffer       = output_buffer;
+	cli_output_buffer = output_buffer;
 	assert_param(NULL != cli_output_buffer);
 
 	commandline_interpreter = cli_callback;
 	assert_param(NULL != cli_callback);
 
-	/* Create that task that handles the console itself. */
 	cli_task_handle = xTaskCreateStatic(
 						cli_task,							/* The task that implements the command console. */
 						"CLI",								/* Text name assigned to the task.  This is just to assist debugging.  The kernel does not use this name itself. */
@@ -79,12 +69,27 @@ void cli_init( char *output_buffer, cli_callback_t cli_callback )
 	assert_param(NULL != cli_task_handle);
 }
 
+/**
+  * @brief  Deinitializes the Commandline Interface
+  * @param	None
+  * @retval None
+  * @note   This function will delete the CLI task that implements
+  * 		command line processing
+  */
 void cli_deinit(void)
 {
 	vTaskDelete(cli_task_handle);
+	cli_output_buffer 		= NULL;
+	commandline_interpreter = NULL;
 }
 
-static void cli_task( void * params )
+/**
+  * @brief  The task that implements command line processing
+  * @param	params optionally points to data which can be passed 
+  * 		on task creation
+  * @retval None
+  */
+static void cli_task(void * params)
 {
 	( void ) params;
 	char received_char;
@@ -94,12 +99,7 @@ static void cli_task( void * params )
 
 	for( ;; )
 	{
-		/* Wait for the next character to arrive.  A semaphore is used to
-		ensure no CPU time is used until data has arrived. */
-		cli_io_read( ( uint8_t * ) &received_char, sizeof( received_char ) );
-
-		//if( true == is_character_received() ) {
-		if( pdTRUE == xSemaphoreTake(uart_rx_complete_semaphore_handle, portMAX_DELAY) ) {
+		if( pdTRUE == (BaseType_t)cli_io_read((uint8_t *)&received_char)) {
 			/* Echo the character back. */
 			cli_io_write( &received_char, sizeof( received_char ) );
 
@@ -113,6 +113,11 @@ static void cli_task( void * params )
 	}
 }
 
+/**
+  * @brief  Checks whether a character is an end of line character or not
+  * @param	ch the character to be checked
+  * @retval true if ch is \n or \r, false otherwise
+  */
 static bool is_end_of_line(char ch)
 {
 	bool retv;
@@ -126,6 +131,14 @@ static bool is_end_of_line(char ch)
 	return retv;
 }
 
+/**
+  * @brief  Processes the characters received on the CLI I/O
+  * @param	received_char points to the received character
+  * @retval None
+  * @note   This function should only be called from the CLI task since it
+  * 		uses multiple CLI related global variables and therefore it is 
+  * 		not reentrant
+  */
 static void process_input(char *received_char)
 {
 	if ( *received_char == '\r' ) {
@@ -154,6 +167,16 @@ static void process_input(char *received_char)
 	}
 }
 
+/**
+  * @brief  Processes the command string
+  * @param	None
+  * @retval None
+  * @note   This function will pass the received command string to the
+  * 		command line interpreter
+  * @note   This function should only be called from the CLI task since it
+  * 		uses multiple CLI related global variables and therefore it is 
+  * 		not reentrant
+  */
 static void process_command(void)
 {
 	/* Just to space the output from the input. */
@@ -178,17 +201,14 @@ static void process_command(void)
 	
 	} while( xReturned != pdFALSE );
 
-	/* All the strings generated by the input command have been sent.
-	Clear the input	string ready to receive the next command.  Remember
-	the command that was just processed first in case it is to be
-	processed again. */
-
+	/* All the strings generated by the input command have been sent. Clear the input string ready to receive the next command.
+	 * Remember	the command that was just processed first in case it is to be processed again. */
 	
 	strcpy( last_input_string, cli_input_buffer );
 	input_index = 0;
 	memset( cli_input_buffer, 0x00, cmdMAX_INPUT_SIZE );
 
-	cli_io_write( pcEndOfOutputMessage, strlen( pcEndOfOutputMessage ) );
+	cli_io_write( end_message, strlen( end_message ) );
 }
 
 
