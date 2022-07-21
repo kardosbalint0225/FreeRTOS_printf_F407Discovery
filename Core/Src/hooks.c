@@ -11,7 +11,6 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-
 /* GetIdleTaskMemory prototype (linked to static allocation support) */
 void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, 
                                     StackType_t  **ppxIdleTaskStackBuffer, 

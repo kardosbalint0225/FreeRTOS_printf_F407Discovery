@@ -20,7 +20,7 @@
 
 typedef struct {
 	uint8_t *pbuf;
-	uint8_t  size;
+	uint16_t size;
 } uart_tx_data_t;
 
 static void UART2_Init(void);
@@ -53,7 +53,8 @@ static StaticQueue_t uart_tx_pending_struct;
 static uint8_t		 uart_tx_pending_queue_storage[UART_TX_PENDING_QUEUE_LENGTH * sizeof(uint8_t *)];
 static QueueHandle_t uart_tx_pending_queue_handle 	= NULL;
 
-#define UART_WRITE_TASK_STACKSIZE					1024
+#define UART_WRITE_TASK_PRIORITY					4
+#define UART_WRITE_TASK_STACKSIZE					512
 static StackType_t   uart_write_task_stack[UART_WRITE_TASK_STACKSIZE];
 static StaticTask_t  uart_write_task_tcb;
 static TaskHandle_t  uart_write_task_handle			= NULL;
@@ -61,7 +62,7 @@ static TaskHandle_t  uart_write_task_handle			= NULL;
 UART_HandleTypeDef huart2;
 DMA_HandleTypeDef  hdma_usart2_tx;
 
-static uint8_t uart_tx_buffer[2048*8];
+static uint8_t uart_tx_buffer[configCOMMAND_INT_MAX_OUTPUT_SIZE*8];
 static uint8_t uart_rx_buffer[4];
 
 
@@ -141,7 +142,7 @@ void log_and_cli_io_init(void)
 	assert_param(NULL != uart_rx_queue_handle);
 
 	for (uint8_t i = 0; i < 8; i++) {
-		uint8_t *buffer_address = &uart_tx_buffer[i*2048];
+		uint8_t *buffer_address = &uart_tx_buffer[i*configCOMMAND_INT_MAX_OUTPUT_SIZE];
 		xQueueSend(uart_tx_available_queue_handle, &buffer_address, 0);
 	}
 
@@ -150,7 +151,7 @@ void log_and_cli_io_init(void)
 										"UART write",
 										UART_WRITE_TASK_STACKSIZE,
 										NULL,
-										tskIDLE_PRIORITY+1,
+										UART_WRITE_TASK_PRIORITY,
 										uart_write_task_stack,
 										&uart_write_task_tcb);
 
@@ -337,9 +338,7 @@ static void UART2_MspDeInit(UART_HandleTypeDef* huart)
 static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
 {
 	portBASE_TYPE higher_priority_task_woken;
-	BaseType_t ret = xSemaphoreGiveFromISR(uart_tx_complete_semaphore_handle, &higher_priority_task_woken);
-	assert_param(pdTRUE == ret);
-
+	xSemaphoreGiveFromISR(uart_tx_complete_semaphore_handle, &higher_priority_task_woken);
 	portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
@@ -353,12 +352,8 @@ static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
 static void UART2_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	portBASE_TYPE higher_priority_task_woken;
-	BaseType_t ret1 = xQueueSendFromISR(uart_rx_queue_handle, &uart_rx_buffer[0], &higher_priority_task_woken);
-	assert_param(pdTRUE == ret1);
-
-	HAL_StatusTypeDef ret2 = HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[0], 1);
-	assert_param(HAL_OK == ret2);
-
+	xQueueSendFromISR(uart_rx_queue_handle, &uart_rx_buffer[0], &higher_priority_task_woken);
+	HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[0], 1);
 	portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
@@ -386,11 +381,11 @@ int log_(const char * format, const char * type, va_list va)
 
 		RTC_GetTime(&hours, &minutes, &seconds);
 
-		int len = snprintf((char *)data.pbuf, 2048, "[%02d:%02d:%02d] %s: ", hours, minutes, seconds, type);
-		assert_param(len < 2048);
+		int len = snprintf((char *)data.pbuf, configCOMMAND_INT_MAX_OUTPUT_SIZE, "[%02d:%02d:%02d] %s: ", hours, minutes, seconds, type);
+		assert_param(len < configCOMMAND_INT_MAX_OUTPUT_SIZE);
 
-		data.size = (uint8_t)len + (uint8_t)vsnprintf((char *)(data.pbuf+len), 2048-len, format, va);
-		assert_param(data.size <= 2048);
+		data.size = (uint8_t)len + (uint8_t)vsnprintf((char *)(data.pbuf+len), configCOMMAND_INT_MAX_OUTPUT_SIZE-len, format, va);
+		assert_param(data.size <= configCOMMAND_INT_MAX_OUTPUT_SIZE);
 
 		BaseType_t ret = xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
 		assert_param(pdTRUE == ret);

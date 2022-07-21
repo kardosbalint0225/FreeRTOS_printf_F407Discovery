@@ -19,7 +19,6 @@
 #include "log.h"
 #include "cli.h"
 #include "FreeRTOS_CLI.h"
-
 #include "SEGGER_SYSVIEW.h"
 
 void SystemClock_Config(void);
@@ -110,41 +109,41 @@ int main(void)
 				NULL
 				);
 
-//	xTaskCreate(
-//				task_b,
-//				"task_b",
-//				( configMINIMAL_STACK_SIZE * 3 ),
-//				NULL,
-//				tskIDLE_PRIORITY,
-//				NULL
-//				);
-//
-//	xTaskCreate(
-//				task_c,
-//				"task_c",
-//				( configMINIMAL_STACK_SIZE * 3 ),
-//				NULL,
-//				tskIDLE_PRIORITY,
-//				NULL
-//				);
-//
-//	xTaskCreate(
-//				task_d,
-//				"task_d",
-//				( configMINIMAL_STACK_SIZE * 3 ),
-//				NULL,
-//				tskIDLE_PRIORITY,
-//				NULL
-//				);
-//
-//	xTaskCreate(
-//				task_e,
-//				"task_e",
-//				( configMINIMAL_STACK_SIZE * 3 ),
-//				NULL,
-//				tskIDLE_PRIORITY,
-//				NULL
-//				);
+	xTaskCreate(
+				task_b,
+				"task_b",
+				( configMINIMAL_STACK_SIZE * 3 ),
+				NULL,
+				tskIDLE_PRIORITY,
+				NULL
+				);
+
+	xTaskCreate(
+				task_c,
+				"task_c",
+				( configMINIMAL_STACK_SIZE * 3 ),
+				NULL,
+				tskIDLE_PRIORITY,
+				NULL
+				);
+
+	xTaskCreate(
+				task_d,
+				"task_d",
+				( configMINIMAL_STACK_SIZE * 3 ),
+				NULL,
+				tskIDLE_PRIORITY,
+				NULL
+				);
+
+	xTaskCreate(
+				task_e,
+				"task_e",
+				( configMINIMAL_STACK_SIZE * 3 ),
+				NULL,
+				tskIDLE_PRIORITY,
+				NULL
+				);
 
 	vTaskStartScheduler();
 

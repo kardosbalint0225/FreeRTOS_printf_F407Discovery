@@ -30,7 +30,8 @@ static char *cli_output_buffer = NULL;
 static char last_input_string[ cmdMAX_INPUT_SIZE ];
 static uint8_t input_index = 0;
 
-#define CLI_TASK_STACKSIZE			1024
+#define CLI_TASK_PRIORITY			3
+#define CLI_TASK_STACKSIZE			512
 static StackType_t  cli_task_stack[CLI_TASK_STACKSIZE];
 static StaticTask_t cli_task_tcb;
 static TaskHandle_t cli_task_handle = NULL;
@@ -62,7 +63,7 @@ void cli_init(char *output_buffer, cli_callback_t cli_callback)
 						"CLI",				/* Text name assigned to the task.  This is just to assist debugging.  The kernel does not use this name itself. */
 						CLI_TASK_STACKSIZE,	/* The size of the stack allocated to the task. */
 						NULL,				/* The parameter is not used, so NULL is passed. */
-						tskIDLE_PRIORITY,	/* The priority allocated to the task. */
+						CLI_TASK_PRIORITY,	/* The priority allocated to the task. */
 						cli_task_stack,
 						&cli_task_tcb);
 

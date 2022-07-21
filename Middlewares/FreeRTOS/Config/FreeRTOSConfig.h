@@ -51,7 +51,7 @@ extern uint32_t SystemCoreClock;
 /* Memory allocation related definitions. */
 #define configSUPPORT_STATIC_ALLOCATION               ( 1 )
 #define configSUPPORT_DYNAMIC_ALLOCATION              ( 1 )
-#define configTOTAL_HEAP_SIZE                         ( (size_t)15360 )
+#define configTOTAL_HEAP_SIZE                         ( (size_t)0x10000 )
 #define configAPPLICATION_ALLOCATED_HEAP              ( 0 )
 #define configSTACK_ALLOCATION_FROM_SEPARATE_HEAP     ( 0 )
 
@@ -151,7 +151,7 @@ extern uint32_t SystemCoreClock;
 #define INCLUDE_vTaskCleanUpResources                 ( 1 )
 
 /**< FreeRTOS + CLI */
-#define configCOMMAND_INT_MAX_OUTPUT_SIZE 			  ( 2048 )
+#define configCOMMAND_INT_MAX_OUTPUT_SIZE 			  ( 1024 )
 
 /**< Run-time statistics */
 extern void vConfigureTimerForRunTimeStats( void );
