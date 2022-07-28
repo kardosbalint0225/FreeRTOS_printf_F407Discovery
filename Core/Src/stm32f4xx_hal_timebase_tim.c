@@ -10,7 +10,7 @@
 #include "stm32f4xx_hal.h"
 #include "stm32f4xx_hal_tim.h"
 
-TIM_HandleTypeDef        htim7;
+TIM_HandleTypeDef htim7;
 
 void TIM7_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 
@@ -27,12 +27,14 @@ void TIM7_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 {
 	RCC_ClkInitTypeDef    clkconfig;
-	uint32_t              uwTimclock = 0;
-	uint32_t              uwPrescalerValue = 0;
+	uint32_t              uwTimclock       = 0U;
+	uint32_t              uwPrescalerValue = 0U;
 	uint32_t              pFLatency;
+	uint32_t			  uwAPB1Prescaler  = 0U;
 
 	/*Configure the TIM7 IRQ priority */
 	HAL_NVIC_SetPriority(TIM7_IRQn, TickPriority ,0);
+	uwTickPrio = TickPriority;
 
 	/* Enable the TIM7 global Interrupt */
 	HAL_NVIC_EnableIRQ(TIM7_IRQn);
@@ -43,8 +45,16 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 	/* Get clock configuration */
 	HAL_RCC_GetClockConfig(&clkconfig, &pFLatency);
 
+	/* Get APB1 prescaler */
+	uwAPB1Prescaler = clkconfig.APB1CLKDivider;
+
 	/* Compute TIM7 clock */
-	uwTimclock = 2*HAL_RCC_GetPCLK1Freq();
+	if (uwAPB1Prescaler == RCC_HCLK_DIV1) {
+		uwTimclock = HAL_RCC_GetPCLK1Freq();
+	} else {
+		uwTimclock = 2UL * HAL_RCC_GetPCLK1Freq();
+	}
+
 	/* Compute the prescaler value to have TIM7 counter clock equal to 1MHz */
 	uwPrescalerValue = (uint32_t) ((uwTimclock / 1000000U) - 1U);
 
@@ -66,12 +76,12 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 	ret = HAL_TIM_Base_Init(&htim7);
 	assert_param(HAL_OK == ret);
 	
-	ret = HAL_TIM_RegisterCallback(&htim7, HAL_TIM_PERIOD_ELAPSED_CB_ID, TIM7_PeriodElapsedCallback);
-	assert_param(HAL_OK == ret);
-
-	/* Start the TIM time Base generation in interrupt mode */
-	ret = HAL_TIM_Base_Start_IT(&htim7);
-	assert_param(HAL_OK == ret);
+//	ret = HAL_TIM_RegisterCallback(&htim7, HAL_TIM_PERIOD_ELAPSED_CB_ID, TIM7_PeriodElapsedCallback);
+//	assert_param(HAL_OK == ret);
+//
+//	/* Start the TIM time Base generation in interrupt mode */
+//	ret = HAL_TIM_Base_Start_IT(&htim7);
+//	assert_param(HAL_OK == ret);
 	
 	/* Return function status */
 	return ret;
@@ -114,4 +124,20 @@ void TIM7_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	HAL_IncTick();
 }
 
+void HAL_Delay(uint32_t Delay)
+{
+	TIM7->CNT  = 0x0;
+	TIM7->CR1 |= 0x1;
+
+	uint32_t tickcount = 0;
+
+	while (tickcount < Delay) {
+		if ((uint32_t)999 == (uint32_t)(TIM7->CNT)) {
+			tickcount = tickcount + 1;
+			TIM7->CNT  = 0x0;
+		}
+	}
+
+	TIM7->CR1 &= ~(0x1);
+}
 

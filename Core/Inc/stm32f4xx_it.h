@@ -24,6 +24,7 @@ void DMA1_Stream6_IRQHandler(void);
 void USART2_IRQHandler(void);
 void TIM7_IRQHandler(void);
 void TIM2_IRQHandler(void);
+void OTG_FS_IRQHandler(void);
 
 #ifdef __cplusplus
 }

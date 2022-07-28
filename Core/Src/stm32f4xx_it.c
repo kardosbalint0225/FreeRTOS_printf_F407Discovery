@@ -12,6 +12,7 @@
 #include "stm32f4xx_hal.h"
 
 extern DMA_HandleTypeDef  hdma_usart2_tx;
+extern HCD_HandleTypeDef  hhcd_USB_OTG_FS;
 extern UART_HandleTypeDef huart2;
 extern TIM_HandleTypeDef  htim7;
 extern TIM_HandleTypeDef  htim2;
@@ -103,7 +104,7 @@ void DMA1_Stream6_IRQHandler(void)
   */
 void USART2_IRQHandler(void)
 {
-	  HAL_UART_IRQHandler(&huart2);
+	HAL_UART_IRQHandler(&huart2);
 }
 
 /**
@@ -111,7 +112,7 @@ void USART2_IRQHandler(void)
   */
 void TIM7_IRQHandler(void)
 {
-	  HAL_TIM_IRQHandler(&htim7);
+	HAL_TIM_IRQHandler(&htim7);
 }
 
 /**
@@ -119,7 +120,15 @@ void TIM7_IRQHandler(void)
   */
 void TIM2_IRQHandler(void)
 {
-	  HAL_TIM_IRQHandler(&htim2);
+	HAL_TIM_IRQHandler(&htim2);
+}
+
+/**
+  * @brief This function handles USB On The Go FS global interrupt.
+  */
+void OTG_FS_IRQHandler(void)
+{
+	HAL_HCD_IRQHandler(&hhcd_USB_OTG_FS);
 }
 
 

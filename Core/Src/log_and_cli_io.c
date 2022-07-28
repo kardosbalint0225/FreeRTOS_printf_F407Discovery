@@ -53,7 +53,7 @@ static StaticQueue_t uart_tx_pending_struct;
 static uint8_t		 uart_tx_pending_queue_storage[UART_TX_PENDING_QUEUE_LENGTH * sizeof(uint8_t *)];
 static QueueHandle_t uart_tx_pending_queue_handle 	= NULL;
 
-#define UART_WRITE_TASK_PRIORITY					4
+#define UART_WRITE_TASK_PRIORITY					2
 #define UART_WRITE_TASK_STACKSIZE					512
 static StackType_t   uart_write_task_stack[UART_WRITE_TASK_STACKSIZE];
 static StaticTask_t  uart_write_task_tcb;
@@ -79,10 +79,6 @@ static void uart_write_task(void *params)
 	for ( ;; )
 	{
 		if (pdPASS == xSemaphoreTake(uart_tx_complete_semaphore_handle, portMAX_DELAY)) {
-			uint8_t *released = NULL;
-
-			xQueueReceive(uart_tx_pending_queue_handle, &released, 0);
-			xQueueSend(uart_tx_available_queue_handle, &released, 0);
 
 			uart_tx_data_t uart_tx_data = {
 				.pbuf = NULL,
@@ -337,8 +333,13 @@ static void UART2_MspDeInit(UART_HandleTypeDef* huart)
   */
 static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
 {
-	portBASE_TYPE higher_priority_task_woken;
+	portBASE_TYPE higher_priority_task_woken = pdFALSE;
+	uint8_t *released = NULL;
+
 	xSemaphoreGiveFromISR(uart_tx_complete_semaphore_handle, &higher_priority_task_woken);
+	xQueueReceiveFromISR(uart_tx_pending_queue_handle, &released, &higher_priority_task_woken);
+	xQueueSendFromISR(uart_tx_available_queue_handle, &released, &higher_priority_task_woken);
+
 	portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
@@ -351,7 +352,7 @@ static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
   */
 static void UART2_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	portBASE_TYPE higher_priority_task_woken;
+	portBASE_TYPE higher_priority_task_woken = pdFALSE;
 	xQueueSendFromISR(uart_rx_queue_handle, &uart_rx_buffer[0], &higher_priority_task_woken);
 	HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[0], 1);
 	portYIELD_FROM_ISR(higher_priority_task_woken);
@@ -425,12 +426,14 @@ void cli_io_write(const char * s, uint16_t size)
 		.size = 0,
 	};
 
-	if ( pdPASS == xQueueReceive(uart_tx_available_queue_handle, &data.pbuf, portMAX_DELAY) ) {
+	const TickType_t block_200ms = pdMS_TO_TICKS(200);
+
+	if ( pdPASS == xQueueReceive(uart_tx_available_queue_handle, &data.pbuf, block_200ms) ) {
 
 		memcpy(data.pbuf, s, size);
 		data.size = size;
 
-		BaseType_t ret = xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
+		BaseType_t ret = xQueueSend(uart_tx_ready_queue_handle, &data, block_200ms);
 		assert_param(pdTRUE == ret);
 	}
 }

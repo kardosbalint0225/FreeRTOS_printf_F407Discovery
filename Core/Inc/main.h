@@ -15,15 +15,16 @@
 extern "C" {
 #endif
 
-//#include "stm32f4xx_hal.h"
-//
-//#define PH0_OSC_IN_Pin 			GPIO_PIN_0
-//#define PH0_OSC_IN_GPIO_Port 	GPIOH
-//#define PH1_OSC_OUT_Pin 		GPIO_PIN_1
-//#define PH1_OSC_OUT_GPIO_Port 	GPIOH
-//
-//#define SWCLK_Pin 				GPIO_PIN_14
-//#define SWCLK_GPIO_Port 		GPIOA
+#define OTG_FS_PowerSwitchOn_Pin 				GPIO_PIN_0
+#define OTG_FS_PowerSwitchOn_GPIO_Port 			GPIOC
+#define OTG_FS_ID_Pin 							GPIO_PIN_10
+#define OTG_FS_ID_GPIO_Port 					GPIOA
+#define OTG_FS_DM_Pin 							GPIO_PIN_11
+#define OTG_FS_DM_GPIO_Port 					GPIOA
+#define OTG_FS_DP_Pin 							GPIO_PIN_12
+#define OTG_FS_DP_GPIO_Port 					GPIOA
+#define OTG_FS_OverCurrent_Pin 					GPIO_PIN_5
+#define OTG_FS_OverCurrent_GPIO_Port 			GPIOD
 
 
 #ifdef __cplusplus

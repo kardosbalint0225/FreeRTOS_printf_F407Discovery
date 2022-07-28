@@ -20,6 +20,8 @@
 #include "cli.h"
 #include "FreeRTOS_CLI.h"
 #include "SEGGER_SYSVIEW.h"
+#include "fatfs.h"
+#include "usb_host.h"
 
 void SystemClock_Config(void);
 
@@ -89,13 +91,14 @@ void task_e(void *params)
   */
 int main(void)
 {
-	uwTickPrio = TICK_INT_PRIORITY; 	/**< bugfix: stm32f4xx_hal.c initializes this value to 16 */
-	 	 	 	 	 	 	 	 	 	/**< 	 	 assert_param will fail */
 	HAL_Init();
 	SystemClock_Config();
 	SEGGER_SYSVIEW_Conf();
 
 	GPIO_Init();
+
+	MX_USB_HOST_Init();
+	MX_FATFS_Init();
 
 	log_init();
 	cli_init(FreeRTOS_CLIGetOutputBuffer(), FreeRTOS_CLIProcessCommand);
