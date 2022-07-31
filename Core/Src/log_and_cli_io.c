@@ -48,10 +48,7 @@ static StaticQueue_t uart_tx_ready_struct;
 static uint8_t		 uart_tx_ready_queue_storage[UART_TX_READY_QUEUE_LENGTH * sizeof(uart_tx_data_t)];
 static QueueHandle_t uart_tx_ready_queue_handle		= NULL;
 
-#define UART_TX_PENDING_QUEUE_LENGTH				1
-static StaticQueue_t uart_tx_pending_struct;
-static uint8_t		 uart_tx_pending_queue_storage[UART_TX_PENDING_QUEUE_LENGTH * sizeof(uint8_t *)];
-static QueueHandle_t uart_tx_pending_queue_handle 	= NULL;
+static uint8_t      *uart_tx_pending                = NULL;
 
 #define UART_WRITE_TASK_PRIORITY					2
 #define UART_WRITE_TASK_STACKSIZE					512
@@ -78,16 +75,16 @@ static void uart_write_task(void *params)
 
 	for ( ;; )
 	{
-		if (pdPASS == xSemaphoreTake(uart_tx_complete_semaphore_handle, portMAX_DELAY)) {
+		uart_tx_data_t uart_tx_data = {
+			.pbuf = NULL,
+			.size = 0,
+		};
 
-			uart_tx_data_t uart_tx_data = {
-				.pbuf = NULL,
-				.size = 0,
-			};
+		if (pdPASS == xQueueReceive(uart_tx_ready_queue_handle, &uart_tx_data, portMAX_DELAY)) {
 
-			if (pdPASS == xQueueReceive(uart_tx_ready_queue_handle, &uart_tx_data, portMAX_DELAY)) {
+			if (pdPASS == xSemaphoreTake(uart_tx_complete_semaphore_handle, portMAX_DELAY))	{
 				HAL_UART_Transmit_DMA(&huart2, uart_tx_data.pbuf, uart_tx_data.size);
-				xQueueSend(uart_tx_pending_queue_handle, &uart_tx_data.pbuf, 0);
+				uart_tx_pending = uart_tx_data.pbuf;
 			}
 		}
 	}
@@ -109,28 +106,21 @@ void log_and_cli_io_init(void)
 	assert_param(NULL != uart_tx_complete_semaphore_handle);
 	xSemaphoreGive(uart_tx_complete_semaphore_handle);
 
-	uart_tx_pending_queue_handle    = xQueueCreateStatic(
-										UART_TX_PENDING_QUEUE_LENGTH,
-										sizeof(uint8_t *),
-										uart_tx_pending_queue_storage,
-										&uart_tx_pending_struct);
-	assert_param(NULL != uart_tx_pending_queue_handle);
-
-	uart_tx_available_queue_handle  = xQueueCreateStatic(
+	uart_tx_available_queue_handle    = xQueueCreateStatic(
 										UART_TX_AVAILABLE_QUEUE_LENGTH,
 										sizeof(uint8_t *),
 										uart_tx_available_queue_storage,
 										&uart_tx_available_struct);
 	assert_param(NULL != uart_tx_available_queue_handle);
 
-	uart_tx_ready_queue_handle      = xQueueCreateStatic(
+	uart_tx_ready_queue_handle        = xQueueCreateStatic(
 										UART_TX_READY_QUEUE_LENGTH,
 										sizeof(uart_tx_data_t),
 										uart_tx_ready_queue_storage,
 										&uart_tx_ready_struct);
 	assert_param(NULL != uart_tx_ready_queue_handle);
 
-	uart_rx_queue_handle			= xQueueCreateStatic(
+	uart_rx_queue_handle			  = xQueueCreateStatic(
 										UART_RX_QUEUE_LENGTH,
 										sizeof(uint8_t),
 										uart_rx_queue_storage,
@@ -142,7 +132,7 @@ void log_and_cli_io_init(void)
 		xQueueSend(uart_tx_available_queue_handle, &buffer_address, 0);
 	}
 
-	uart_write_task_handle 			= xTaskCreateStatic(
+	uart_write_task_handle 			  = xTaskCreateStatic(
 										uart_write_task,
 										"UART write",
 										UART_WRITE_TASK_STACKSIZE,
@@ -172,7 +162,6 @@ void log_and_cli_io_deinit(void)
 	vTaskDelete(uart_write_task_handle);
 	vQueueDelete(uart_tx_available_queue_handle);
 	vQueueDelete(uart_tx_ready_queue_handle);
-	vQueueDelete(uart_tx_pending_queue_handle);
 	vQueueDelete(uart_rx_queue_handle);
 	vSemaphoreDelete(uart_tx_complete_semaphore_handle);
 }
@@ -259,7 +248,7 @@ static void UART2_MspInit(UART_HandleTypeDef* huart)
 	HAL_StatusTypeDef ret = HAL_DMA_Init(&hdma_usart2_tx);
 	assert_param(HAL_OK == ret);
 
-	__HAL_LINKDMA(huart,hdmatx,hdma_usart2_tx);
+	__HAL_LINKDMA(huart, hdmatx, hdma_usart2_tx);
 
 	/* USART2 interrupt Init */
 	HAL_NVIC_SetPriority(USART2_IRQn, 14, 0);
@@ -334,11 +323,9 @@ static void UART2_MspDeInit(UART_HandleTypeDef* huart)
 static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
 {
 	portBASE_TYPE higher_priority_task_woken = pdFALSE;
-	uint8_t *released = NULL;
 
 	xSemaphoreGiveFromISR(uart_tx_complete_semaphore_handle, &higher_priority_task_woken);
-	xQueueReceiveFromISR(uart_tx_pending_queue_handle, &released, &higher_priority_task_woken);
-	xQueueSendFromISR(uart_tx_available_queue_handle, &released, &higher_priority_task_woken);
+	xQueueSendFromISR(uart_tx_available_queue_handle, &uart_tx_pending, &higher_priority_task_woken);
 
 	portYIELD_FROM_ISR(higher_priority_task_woken);
 }

@@ -10,6 +10,7 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
+#include "usb_host.h"
 
 /* GetIdleTaskMemory prototype (linked to static allocation support) */
 void vApplicationGetIdleTaskMemory( StaticTask_t **ppxIdleTaskTCBBuffer, 
@@ -29,6 +30,7 @@ void vApplicationDaemonTaskStartupHook( void );
 void vApplicationDaemonTaskStartupHook( void )
 {
     SEGGER_SYSVIEW_Start();
+	MX_USB_HOST_Init();
 }
 
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)

@@ -76,12 +76,12 @@ HAL_StatusTypeDef HAL_InitTick(uint32_t TickPriority)
 	ret = HAL_TIM_Base_Init(&htim7);
 	assert_param(HAL_OK == ret);
 	
-//	ret = HAL_TIM_RegisterCallback(&htim7, HAL_TIM_PERIOD_ELAPSED_CB_ID, TIM7_PeriodElapsedCallback);
-//	assert_param(HAL_OK == ret);
-//
-//	/* Start the TIM time Base generation in interrupt mode */
-//	ret = HAL_TIM_Base_Start_IT(&htim7);
-//	assert_param(HAL_OK == ret);
+	ret = HAL_TIM_RegisterCallback(&htim7, HAL_TIM_PERIOD_ELAPSED_CB_ID, TIM7_PeriodElapsedCallback);
+	assert_param(HAL_OK == ret);
+
+	/* Start the TIM time Base generation in interrupt mode */
+	ret = HAL_TIM_Base_Start_IT(&htim7);
+	assert_param(HAL_OK == ret);
 	
 	/* Return function status */
 	return ret;
@@ -124,20 +124,20 @@ void TIM7_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	HAL_IncTick();
 }
 
-void HAL_Delay(uint32_t Delay)
-{
-	TIM7->CNT  = 0x0;
-	TIM7->CR1 |= 0x1;
-
-	uint32_t tickcount = 0;
-
-	while (tickcount < Delay) {
-		if ((uint32_t)999 == (uint32_t)(TIM7->CNT)) {
-			tickcount = tickcount + 1;
-			TIM7->CNT  = 0x0;
-		}
-	}
-
-	TIM7->CR1 &= ~(0x1);
-}
+//void HAL_Delay(uint32_t Delay)
+//{
+//	TIM7->CNT  = 0x0;
+//	TIM7->CR1 |= 0x1;
+//
+//	uint32_t tickcount = 0;
+//
+//	while (tickcount < Delay) {
+//		if ((uint32_t)999 == (uint32_t)(TIM7->CNT)) {
+//			tickcount = tickcount + 1;
+//			TIM7->CNT  = 0x0;
+//		}
+//	}
+//
+//	TIM7->CR1 &= ~(0x1);
+//}
 
