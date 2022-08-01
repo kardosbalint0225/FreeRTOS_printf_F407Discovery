@@ -18,12 +18,4 @@
 
 static uint32_t is_mounted = 0;
 
-void usb_storage_mount_task(void *params)
-{
-	(void)params;
 
-	for ( ;; )
-	{
-
-	}
-}

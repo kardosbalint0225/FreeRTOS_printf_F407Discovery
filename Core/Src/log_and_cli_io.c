@@ -48,8 +48,6 @@ static StaticQueue_t uart_tx_ready_struct;
 static uint8_t		 uart_tx_ready_queue_storage[UART_TX_READY_QUEUE_LENGTH * sizeof(uart_tx_data_t)];
 static QueueHandle_t uart_tx_ready_queue_handle		= NULL;
 
-static uint8_t      *uart_tx_pending                = NULL;
-
 #define UART_WRITE_TASK_PRIORITY					2
 #define UART_WRITE_TASK_STACKSIZE					512
 static StackType_t   uart_write_task_stack[UART_WRITE_TASK_STACKSIZE];
@@ -64,7 +62,7 @@ static uint8_t uart_rx_buffer[4];
 
 
 /**
-  * @brief  UART writer task
+  * @brief  UART writer gatekeeper task
   * @param  params optionally points to data passed on task creation
   * @retval None
   * @note	Task that performs the UART TX related jobs.
@@ -72,21 +70,29 @@ static uint8_t uart_rx_buffer[4];
 static void uart_write_task(void *params)
 {
 	(void)params;
+	BaseType_t ret;
+	HAL_StatusTypeDef hal_status;
+	uint8_t *uart_tx_pending = NULL;
+
+	uart_tx_data_t uart_tx_data = {
+		.pbuf = NULL,
+		.size = 0,
+	};
 
 	for ( ;; )
 	{
-		uart_tx_data_t uart_tx_data = {
-			.pbuf = NULL,
-			.size = 0,
-		};
+		ret = xQueueReceive(uart_tx_ready_queue_handle, &uart_tx_data, portMAX_DELAY);
+		assert_param(pdPASS == ret);
 
-		if (pdPASS == xQueueReceive(uart_tx_ready_queue_handle, &uart_tx_data, portMAX_DELAY)) {
+		hal_status = HAL_UART_Transmit_DMA(&huart2, uart_tx_data.pbuf, uart_tx_data.size);
+		assert_param(HAL_OK == hal_status);
+		uart_tx_pending = uart_tx_data.pbuf;
 
-			if (pdPASS == xSemaphoreTake(uart_tx_complete_semaphore_handle, portMAX_DELAY))	{
-				HAL_UART_Transmit_DMA(&huart2, uart_tx_data.pbuf, uart_tx_data.size);
-				uart_tx_pending = uart_tx_data.pbuf;
-			}
-		}
+		ret = xSemaphoreTake(uart_tx_complete_semaphore_handle, portMAX_DELAY);
+		assert_param(pdPASS == ret);
+
+		ret = xQueueSend(uart_tx_available_queue_handle, &uart_tx_pending, 0);
+		assert_param(pdPASS == ret);
 	}
 }
 
@@ -104,7 +110,7 @@ void log_and_cli_io_init(void)
 
 	uart_tx_complete_semaphore_handle = xSemaphoreCreateBinaryStatic(&uart_tx_complete_semaphore_storage);
 	assert_param(NULL != uart_tx_complete_semaphore_handle);
-	xSemaphoreGive(uart_tx_complete_semaphore_handle);
+	xSemaphoreTake(uart_tx_complete_semaphore_handle, 0);
 
 	uart_tx_available_queue_handle    = xQueueCreateStatic(
 										UART_TX_AVAILABLE_QUEUE_LENGTH,
@@ -143,8 +149,8 @@ void log_and_cli_io_init(void)
 
 	assert_param(NULL != uart_write_task_handle);
 
-	HAL_StatusTypeDef ret = HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[0], 1);
-	assert_param(HAL_OK == ret);
+	HAL_StatusTypeDef hal_status = HAL_UART_Receive_IT(&huart2, &uart_rx_buffer[0], 1);
+	assert_param(HAL_OK == hal_status);
 }
 
 /**
@@ -323,10 +329,7 @@ static void UART2_MspDeInit(UART_HandleTypeDef* huart)
 static void UART2_TxCpltCallback(UART_HandleTypeDef *huart)
 {
 	portBASE_TYPE higher_priority_task_woken = pdFALSE;
-
 	xSemaphoreGiveFromISR(uart_tx_complete_semaphore_handle, &higher_priority_task_woken);
-	xQueueSendFromISR(uart_tx_available_queue_handle, &uart_tx_pending, &higher_priority_task_woken);
-
 	portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
@@ -365,19 +368,21 @@ int log_(const char * format, const char * type, va_list va)
 		.size = 0,
 	};
 
-	if ( pdPASS == xQueueReceive(uart_tx_available_queue_handle, &data.pbuf, portMAX_DELAY) ) {
+	BaseType_t ret;
 
-		RTC_GetTime(&hours, &minutes, &seconds);
+	ret = xQueueReceive(uart_tx_available_queue_handle, &data.pbuf, portMAX_DELAY);
+	assert_param( pdTRUE == ret);
 
-		int len = snprintf((char *)data.pbuf, configCOMMAND_INT_MAX_OUTPUT_SIZE, "[%02d:%02d:%02d] %s: ", hours, minutes, seconds, type);
-		assert_param(len < configCOMMAND_INT_MAX_OUTPUT_SIZE);
+	RTC_GetTime(&hours, &minutes, &seconds);
 
-		data.size = (uint8_t)len + (uint8_t)vsnprintf((char *)(data.pbuf+len), configCOMMAND_INT_MAX_OUTPUT_SIZE-len, format, va);
-		assert_param(data.size <= configCOMMAND_INT_MAX_OUTPUT_SIZE);
+	int len = snprintf((char *)data.pbuf, configCOMMAND_INT_MAX_OUTPUT_SIZE, "[%02d:%02d:%02d] %s: ", hours, minutes, seconds, type);
+	assert_param(len < configCOMMAND_INT_MAX_OUTPUT_SIZE);
 
-		BaseType_t ret = xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
-		assert_param(pdTRUE == ret);
-	}
+	data.size = (uint8_t)len + (uint8_t)vsnprintf((char *)(data.pbuf+len), configCOMMAND_INT_MAX_OUTPUT_SIZE-len, format, va);
+	assert_param(data.size <= configCOMMAND_INT_MAX_OUTPUT_SIZE);
+
+	ret = xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
+	assert_param(pdTRUE == ret);
 
 	return (int)data.size;
 }
@@ -413,16 +418,16 @@ void cli_io_write(const char * s, uint16_t size)
 		.size = 0,
 	};
 
-	const TickType_t block_200ms = pdMS_TO_TICKS(200);
+	BaseType_t ret;
 
-	if ( pdPASS == xQueueReceive(uart_tx_available_queue_handle, &data.pbuf, block_200ms) ) {
+	ret = xQueueReceive(uart_tx_available_queue_handle, &data.pbuf, portMAX_DELAY);
+	assert_param(pdTRUE == ret);
 
-		memcpy(data.pbuf, s, size);
-		data.size = size;
+	memcpy(data.pbuf, s, size);
+	data.size = size;
 
-		BaseType_t ret = xQueueSend(uart_tx_ready_queue_handle, &data, block_200ms);
-		assert_param(pdTRUE == ret);
-	}
+	ret = xQueueSend(uart_tx_ready_queue_handle, &data, portMAX_DELAY);
+	assert_param(pdTRUE == ret);
 }
 
 

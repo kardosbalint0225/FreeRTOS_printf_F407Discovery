@@ -25,12 +25,12 @@
 
 void SystemClock_Config(void);
 
-void task_e(void *params)
+void task_b(void *params)
 {
 	for ( ;; )
 	{
-		vTaskDelay(pdMS_TO_TICKS(60000));
-		assert_param(0);
+		vTaskDelay(pdMS_TO_TICKS(1000));
+		log_info("Test text.\r\n");
 	}
 }
 
@@ -51,6 +51,15 @@ int main(void)
 
 	log_init();
 	cli_init(FreeRTOS_CLIGetOutputBuffer(), FreeRTOS_CLIProcessCommand);
+
+	xTaskCreate(
+				task_b,
+				"task_b",
+				( configMINIMAL_STACK_SIZE * 3 ),
+				NULL,
+				tskIDLE_PRIORITY,
+				NULL
+				);
 
 	vTaskStartScheduler();
 
